@@ -3,18 +3,23 @@
 
 using namespace std;
 
+//typedef void(*basicFunc)(Object*);
+
 static class Input_Pointers
 {
 public:
     bool* mouseL;
     bool* mouseR;
     bool* mouseM;
+    bool pmouseL = false;
+    bool pmouseR = false;
+    bool pmouseM = false;
+
+    int* mouseX;
+    int* mouseY;
+    int pmouseX = 0;
+    int pmouseY = 0;
 }UID_Input;
-
-static struct Functions
-{
-
-};
 
 struct Palette
 {
@@ -90,10 +95,11 @@ struct Object
     void* icon;
 
     //function
-    void* onHover;
-    void* onMoveAway;
-    void* onClick;
-    void* onClickOff;
+    //basicFunc HoverOn;
+    //basicFunc MoveAway;
+    //basicFunc ClickOn;
+    //basicFunc ClickOff;
+    //basicFunc HoldOn;
 
     //constructors
     Object()
@@ -119,8 +125,6 @@ struct Object
 
         //rectangle,elipse
         filled = true;
-        main_color = Palette0.color[0];
-        sec_color = Palette0.color[1];
         line_weight = 1;
         hardness = 100;
     }
@@ -146,26 +150,22 @@ struct Layer
     }
 }Layer0;
 
-static class UI
+class UID
 {
-private:
     const int maxX = 1920;
     const int maxY = 1080;
 
-    void Input_Calls()
-    {
-
-    }
-
 public:
+
     vector<Layer*> layer = { &Layer0 };
     vector<Palette*> palette = { &Palette0 };
     vector<Icon*> icon; // for list of icons
     Object** onTop = new Object * [maxX * maxY];
+    Object* lastOnTop = &Object0;
 
     unsigned int BGcolor = 0x202020;
     //void* fillfunc;
-    UI()
+    UID()
     {
         for (int i = 0; i < maxX * maxY; i++)
         {
@@ -231,6 +231,13 @@ public:
 
     void Render(static void* mem, static unsigned int mh, static unsigned int mw) //takes in pointer to main buffer, its width and height
     {
+        Object* p = onTop[UID_Input.pmouseX, UID_Input.pmouseY];
+
+        if (UID_Input.mouseL && UID_Input.pmouseL)
+        {
+            //p->HoldOn(p);
+        }
+
         unsigned int* memptr = (unsigned int*)mem; // assign memory pointer
 
         for (int i = 0; i < mh * mw; i++) // writes background color to main buffer
@@ -360,15 +367,12 @@ public:
                 memptr++;
                 pixel++;
             }
-
         }
     }
-
 }UID;
 
 class UID_Rect
 {
-
 public:
     int id;
     int layer;
@@ -392,15 +396,27 @@ public:
     {
         ptr->palette->color[0] = color;
     }
+
     void setColor(unsigned int color, int n)
     {
         ptr->palette->color[n] = color;
     }
-
-    void setOnClick(void** func)
+    /*
+    void setClickOn(basicFunc func)
     {
-
+        ptr->ClickOn = func;
     }
+
+    void setClickOff(basicFunc func)
+    {
+        ptr->ClickOff = func;
+    }
+
+    void setOnHold(basicFunc func)
+    {
+        ptr->HoldOn = func;
+    }
+    */
     // Constructors
 
     UID_Rect()//sets default everything
@@ -448,14 +464,8 @@ public:
     }
 };
 
-//preconfigured functions
-
-static struct functionInfo
+void followMouse(Object* o)
 {
-
-};
-
-void FollowMouse()
-{
-
+    o->posx += *UID_Input.mouseX - UID_Input.pmouseX;
+    o->posy += *UID_Input.mouseY - UID_Input.pmouseY;
 }

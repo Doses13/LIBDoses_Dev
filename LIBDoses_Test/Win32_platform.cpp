@@ -69,6 +69,8 @@ struct MessageInfo
         bool l = false;
         bool r = false;
         bool m = false;
+        int cx = 0;
+        int cy = 0;
     }Mouse;
 }MInfo;
 
@@ -173,15 +175,22 @@ void Program()// main program---------------------------------------------------
     UID_Input.mouseL = &MInfo.Mouse.l;
     UID_Input.mouseR = &MInfo.Mouse.r;
     UID_Input.mouseM = &MInfo.Mouse.m;
+    UID_Input.mouseX = &MInfo.Mouse.cx;
+    UID_Input.mouseY = &MInfo.Mouse.cy;
+
+    typedef void(*func)(Object*);
 
     while (running)
     {
-        //write logic here (this updates even if it can draw image)
+        //write logic here
 
+
+
+        //get mouse input
         if (GetCursorPos(&mouse_cords) && GetWindowPlacement(hwnd, &wp))
         {
-            mx = mouse_cords.x - wp.rcNormalPosition.left - 8;
-            my = mouse_cords.y - wp.rcNormalPosition.top - 32;
+            MInfo.Mouse.cx = mouse_cords.x - wp.rcNormalPosition.left - 8;
+            MInfo.Mouse.cy = mouse_cords.y - wp.rcNormalPosition.top - 32;
         }
 
         //render
