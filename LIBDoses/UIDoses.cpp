@@ -1,22 +1,30 @@
 #include "UIDoses.h"
-#include <vector>
 
 using namespace std;
 
-//typedef void(*basicFunc)(Object*);
+typedef void(*basicFunc)(Object*);
 
-static class Input_Pointers
+static class Input_Information
 {
 public:
+    //pointers
     bool* mouseL;
     bool* mouseR;
     bool* mouseM;
+    int* mouseX;
+    int* mouseY;
+
+    //store current
+    bool cmouseL = false;
+    bool cmouseR = false;
+    bool cmouseM = false;
+    int cmouseX = 0;
+    int cmouseY = 0;
+
+    //store previous
     bool pmouseL = false;
     bool pmouseR = false;
     bool pmouseM = false;
-
-    int* mouseX;
-    int* mouseY;
     int pmouseX = 0;
     int pmouseY = 0;
 }UID_Input;
@@ -63,8 +71,8 @@ struct Object
     // Inheritance
     int id, order, layer;
     Palette* palette;
-    int main_color;
-    int sec_color;
+    int main_color; //index to palette
+    int sec_color;  //index to palette
 
     Object* parent;
     vector<Object*> children;
@@ -95,11 +103,12 @@ struct Object
     void* icon;
 
     //function
-    //basicFunc HoverOn;
-    //basicFunc MoveAway;
-    //basicFunc ClickOn;
-    //basicFunc ClickOff;
-    //basicFunc HoldOn;
+    vector<basicFunc> ClickOn;
+    vector<basicFunc> ClickOff;
+    vector<basicFunc> HoverOn;
+    vector<basicFunc> HoverOff;
+    vector<basicFunc> HoldOn;
+    vector<basicFunc> HoldOff;
 
     //constructors
     Object()
@@ -120,8 +129,8 @@ struct Object
         enabled = true;
         visible = true;
         palette = 0;
-        main_color;
-        sec_color;
+        main_color = 0;
+        sec_color = 1;
 
         //rectangle,elipse
         filled = true;
@@ -160,8 +169,9 @@ public:
     vector<Layer*> layer = { &Layer0 };
     vector<Palette*> palette = { &Palette0 };
     vector<Icon*> icon; // for list of icons
-    Object** onTop = new Object * [maxX * maxY];
-    Object* lastOnTop = &Object0;
+    Object** onTop = new Object* [maxX * maxY];
+    Object* pOnTop = &Object0; //stores object that mouse was on last
+    bool firstRender = true;
 
     unsigned int BGcolor = 0x202020;
     //void* fillfunc;
@@ -213,8 +223,16 @@ public:
     {
         int i = (y * maxX) + x;
         if (i < 0 || i > maxX * maxY) { return &Object0; }
-        //if (x < 0 || x > width) { return &Object0; }
-        //if (y < 0 || y > height) { return &Object0; }
+        Object* o = onTop[i];
+        if (o != &Object0) { return o; }
+    }
+
+    Object* Get_Obj(int x, int y, int width, int height)
+    {
+        int i = (y * maxX) + x;
+        if (i < 0 || i > maxX * maxY) { return &Object0; }
+        if (x < 0 || x > width) { return &Object0; }
+        if (y < 0 || y > height) { return &Object0; }
         Object* o = onTop[i];
         if (o != &Object0) { return o; }
     }
@@ -231,18 +249,72 @@ public:
 
     void Render(static void* mem, static unsigned int mh, static unsigned int mw) //takes in pointer to main buffer, its width and height
     {
-        Object* p = onTop[UID_Input.pmouseX, UID_Input.pmouseY];
+        //HANDLE EVENT SYSTEM
 
-        if (UID_Input.mouseL && UID_Input.pmouseL)
+        //write pointers to placeholders
+        UID_Input.cmouseL = *UID_Input.mouseL;
+        UID_Input.cmouseR = *UID_Input.mouseR;
+        UID_Input.cmouseM = *UID_Input.mouseM;
+        UID_Input.cmouseX = *UID_Input.mouseX;
+        UID_Input.cmouseY = *UID_Input.mouseY;
+
+        Object* cOnTop = Get_Obj(*UID_Input.mouseX, *UID_Input.mouseY, (int)mw, (int)mh); //get object that on under mouse
+
+        if (!firstRender)//handle events if its not the first render
         {
-            //p->HoldOn(p);
+            if (UID_Input.cmouseL && !UID_Input.pmouseL)//--------test click on
+            {
+                for (int i = 0; i < cOnTop->ClickOn.size(); i++)
+                {
+                    cOnTop->ClickOn[i](cOnTop);
+                }
+            }
+            else if (cOnTop != pOnTop)//--------------------------test hover on
+            {
+                for (int i = 0; i < cOnTop->HoverOn.size(); i++)//execute hover on for new
+                {
+                    cOnTop->HoverOn[i](cOnTop);
+                }
+                for (int i = 0; i < pOnTop->HoverOff.size(); i++)
+                {
+                    pOnTop->HoverOff[i](pOnTop);
+                }
+            }
+            else if (UID_Input.cmouseL && UID_Input.pmouseL)//-----test hold on
+            {
+                for (int i = 0; i < cOnTop->HoldOn.size(); i++)
+                {
+                    cOnTop->HoldOn[i](cOnTop);
+                }
+            }
         }
+        else firstRender = false;
+
+        //write place holder to previous value placeholders
+        UID_Input.pmouseL = UID_Input.cmouseL;
+        UID_Input.pmouseR = UID_Input.cmouseR;
+        UID_Input.pmouseM = UID_Input.cmouseM;
+        UID_Input.pmouseX = UID_Input.cmouseX;
+        UID_Input.pmouseY = UID_Input.cmouseY;
+
+        pOnTop = cOnTop;;//write object pointer to last on top
+
+        //HANDLE RELATIONSHIPS
+
+        //parent-child code coming soon
+
+        //HANDLE RENDERING
 
         unsigned int* memptr = (unsigned int*)mem; // assign memory pointer
 
         for (int i = 0; i < mh * mw; i++) // writes background color to main buffer
         {
             *memptr++ = BGcolor;
+        }
+
+        for (int i = 0; i < maxX * maxY; i++) // clears on top array
+        {
+            onTop[i] = &Object0;
         }
 
         for (int i = 0; i < layer.size(); i++)// for each layer ----------------------------------
@@ -310,7 +382,7 @@ public:
                 int ox = optr->posx;             //object x
                 int oh = optr->height;           //object height
                 int ow = optr->width;            //object width
-                int c0 = optr->palette->color[0];//objects palette color 0
+                int mColor = optr->palette->color[optr->main_color];//objects main color
 
                 // how far object goes over border
                 int no = 0;
@@ -331,7 +403,7 @@ public:
                     {
                         for (int x = ox + wo; x < ow + ox - eo; x++)
                         {
-                            *pixel++ = c0;
+                            *pixel++ = mColor;
                             onTop[y * 1920 + x] = optr;
                         }
                         pixel += (int)w - ow + eo + wo;
@@ -401,22 +473,15 @@ public:
     {
         ptr->palette->color[n] = color;
     }
-    /*
-    void setClickOn(basicFunc func)
-    {
-        ptr->ClickOn = func;
-    }
+    
+    void addClickOn(basicFunc func) { ptr->ClickOn.push_back(func); }
+    void addClickOff(basicFunc func) { ptr->ClickOff.push_back(func); }
 
-    void setClickOff(basicFunc func)
-    {
-        ptr->ClickOff = func;
-    }
+    void addHoverOn(basicFunc func) { ptr->HoverOn.push_back(func); }
+    void addHoverOff(basicFunc func) { ptr->HoverOff.push_back(func); }
 
-    void setOnHold(basicFunc func)
-    {
-        ptr->HoldOn = func;
-    }
-    */
+    void addHoldOn(basicFunc func) { ptr->HoldOn.push_back(func); }
+    void addHoldOff(basicFunc func) { ptr->HoldOff.push_back(func); }
     // Constructors
 
     UID_Rect()//sets default everything
@@ -464,8 +529,34 @@ public:
     }
 };
 
+//predefined functions
+
 void followMouse(Object* o)
 {
-    o->posx += *UID_Input.mouseX - UID_Input.pmouseX;
-    o->posy += *UID_Input.mouseY - UID_Input.pmouseY;
+    o->posx += UID_Input.cmouseX - UID_Input.pmouseX;
+    o->posy += UID_Input.cmouseY - UID_Input.pmouseY;
+}
+
+void incPal(Object * o)
+{
+    if (o->main_color < o->palette->color.size()-1) 
+    {
+        o->main_color++;
+    }
+    else
+    {
+        o->main_color = 0;
+    }
+}
+
+void decPal(Object* o)
+{
+    if (o->main_color > 0)
+    {
+        o->main_color--;
+    }
+    else
+    {
+        o->main_color = o->palette->color.size()-1;
+    }
 }

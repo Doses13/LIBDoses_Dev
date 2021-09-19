@@ -18,4 +18,4 @@
 
 #include <vector>
 
-using namespace std;
+struct Object;

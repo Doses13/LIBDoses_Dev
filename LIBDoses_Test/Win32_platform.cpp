@@ -169,24 +169,27 @@ void Program()// main program---------------------------------------------------
 
     WINDOWPLACEMENT wp;
 
-    UID_Rect Rect0(0, 200, 300, 200, 200, UID.Add_Palette({ 0xffffff }), nullptr);
+    UID_Rect Rect0(0, 200, 300, 200, 200, UID.Add_Palette({ 0xffffff, 0xff0000 }), nullptr);
     UID_Rect Rect1(0, 100, 100, 100, 80, UID.Add_Palette({ 0x00ff80 }), nullptr);
 
+    //(required)
     UID_Input.mouseL = &MInfo.Mouse.l;
     UID_Input.mouseR = &MInfo.Mouse.r;
     UID_Input.mouseM = &MInfo.Mouse.m;
     UID_Input.mouseX = &MInfo.Mouse.cx;
     UID_Input.mouseY = &MInfo.Mouse.cy;
 
-    typedef void(*func)(Object*);
+    Rect0.addHoldOn(followMouse);
+    Rect0.addHoverOn(incPal);
+    Rect0.addHoverOff(decPal);
 
     while (running)
     {
         //write logic here
 
+        Rect1.ptr->palette->color[0]++;
 
-
-        //get mouse input
+        //get mouse input (required)
         if (GetCursorPos(&mouse_cords) && GetWindowPlacement(hwnd, &wp))
         {
             MInfo.Mouse.cx = mouse_cords.x - wp.rcNormalPosition.left - 8;
