@@ -2,8 +2,6 @@
 
 using namespace std;
 
-typedef void(*basicFunc)(Object*);
-
 static class Input_Information
 {
 public:
@@ -28,6 +26,55 @@ public:
     int pmouseX = 0;
     int pmouseY = 0;
 }UID_Input;
+
+struct UID_RGB
+{
+    unsigned int R;
+    unsigned int G;
+    unsigned int B;
+    unsigned int A;
+
+    UID_RGB(unsigned int r, unsigned int g, unsigned int b)
+    {
+        R = r % 255;
+        G = g % 255;
+        B = b % 255;
+    }
+    
+    UID_RGB(unsigned int r, unsigned int g, unsigned int b, unsigned int a)
+    {
+        R = r % 255;
+        G = g % 255;
+        B = b % 255;
+        A = a % 255;
+    }
+};
+
+unsigned int rgbToInt(UID_RGB c)//converts rgb(a) values to an int
+{
+    return c.A * 16777216 + c.R * 65536 + c.G * 256 + c.B;
+}
+
+UID_RGB intToRgb(unsigned int c)//converts int to rgb(a)
+{
+    unsigned int a = c / 16777216;
+    c -= c % 16777216;
+    unsigned int r = c / 65536;
+    c -= c % 65536;
+    unsigned int g = c / 256;
+    c -= c % 256;
+    return UID_RGB(r, g, c, a);
+}
+
+unsigned int adjValByFac(unsigned int c, float fac)
+{
+    UID_RGB temp = intToRgb(c);
+    temp.A = temp.A * fac;
+    temp.R = temp.R * fac;
+    temp.G = temp.G * fac;
+    temp.B = temp.B * fac;
+    return rgbToInt(temp);
+}
 
 struct Palette
 {
@@ -81,11 +128,14 @@ struct Object
     Object_Type type;
     // Used my multiple
     bool filled; //rect, elipse
-    int line_weight; //rect, elipse, curve
+    float line_weight; //rect, elipse, curve
     int hardness; //rect, elipse, curve
 
     // Rect
     int radius;
+
+    // Curve
+    vector<vector2> points;
 
     // Elipse
     int foci1x;
@@ -170,6 +220,7 @@ public:
     vector<Palette*> palette = { &Palette0 };
     vector<Icon*> icon; // for list of icons
     Object** onTop = new Object* [maxX * maxY];
+    Object* cOnTop = &Object0; 
     Object* pOnTop = &Object0; //stores object that mouse was on last
     bool firstRender = true;
 
@@ -233,8 +284,7 @@ public:
         if (i < 0 || i > maxX * maxY) { return &Object0; }
         if (x < 0 || x > width) { return &Object0; }
         if (y < 0 || y > height) { return &Object0; }
-        Object* o = onTop[i];
-        if (o != &Object0) { return o; }
+        return onTop[i];
     }
 
     bool Is_Pos(int x, int y, int width, int height)
@@ -258,7 +308,7 @@ public:
         UID_Input.cmouseX = *UID_Input.mouseX;
         UID_Input.cmouseY = *UID_Input.mouseY;
 
-        Object* cOnTop = Get_Obj(*UID_Input.mouseX, *UID_Input.mouseY, (int)mw, (int)mh); //get object that on under mouse
+        cOnTop = Get_Obj(*UID_Input.mouseX, *UID_Input.mouseY, (int)mw, (int)mh); //get object that on under mouse
 
         if (!firstRender)//handle events if its not the first render
         {
@@ -269,7 +319,7 @@ public:
                     cOnTop->ClickOn[i](cOnTop);
                 }
             }
-            else if (cOnTop != pOnTop)//--------------------------test hover on
+            else if (cOnTop != pOnTop)//--------------------------test hover
             {
                 for (int i = 0; i < cOnTop->HoverOn.size(); i++)//execute hover on for new
                 {
@@ -382,7 +432,7 @@ public:
                 int ox = optr->posx;             //object x
                 int oh = optr->height;           //object height
                 int ow = optr->width;            //object width
-                int mColor = optr->palette->color[optr->main_color];//objects main color
+                unsigned int mColor = optr->palette->color[optr->main_color];//objects main color
 
                 // how far object goes over border
                 int no = 0;
@@ -410,6 +460,34 @@ public:
                     }
                     break;
                 case curve:
+                {
+                    float slope = ((float)optr->points[1].y - (float)optr->points[0].y) / ((float)optr->points[1].x - (float)optr->points[0].x);
+                    int orx = optr->posx;
+                    int ory = optr->posy;
+                    if (slope < 0)
+                    {
+                        ory += optr->height;
+                    }
+                    float lw = optr->line_weight/2;
+                    
+                    pixel += ((int)w * (oy + no)) + ox + wo;//set pixel to start
+                    for (int y = oy + no; y < oy + oh - so; y++)
+                    {
+                        for (int x = ox + wo; x < ow + ox - eo; x++)
+                        {
+                            float nx = x - orx;
+                            float ny = y - ory;
+                            float vert = abs(slope * nx - ny);
+                            float hori = abs(ny / slope - nx);
+                            hori = (int)(hori != 0) * hori + (int)(hori == 0) * 0.0000001;//make sure hori IS NOT 0
+                            float len = vert * cos(atan(vert / hori));
+                            //*pixel++ = (int)(len <= lw) * mColor + (int)(len > lw) * *pixel;//no aa
+                            *pixel++ = (int)(len <= lw) * adjValByFac(mColor, abs(len-1)) + (int)(len > lw) * *pixel;// with aa
+                            onTop[y * 1920 + x] = optr;
+                        }
+                        pixel += (int)w - ow + eo + wo;
+                    }
+                }
                     break;
                 case elipse:
                     break;
@@ -524,6 +602,55 @@ public:
         ptr->filled = filled;
         ptr->line_weight = line_weight;
         ptr->hardness = hardness;
+        ptr->palette = palette;
+        ptr->parent = parent;
+    }
+};
+
+class UID_Curve
+{
+    vector2 calcTopLeft(int x1, int y1, int x2, int y2)
+    {
+        if (x2 - x1 >= 0 && y2 - y1 >= 0) { return { x1, y1 }; } // pointing SE
+        if (x2 - x1 >= 0 && y2 - y1 < 0) { return { x1, y2 }; }// pointing NE
+        if (x2 - x1 < 0 && y2 - y1 < 0) { return { x2, y2 }; }// pointing NW
+        if (x2 - x1 < 0 && y2 - y1 >= 0) { return { x2, y1 }; }// pointing SE
+    }
+
+public:
+    int id;
+    int layer;
+    Object* ptr;
+    Layer* lptr;
+
+    void movePoint(int i, int x, int y)
+    {
+        ptr->points[i].x += x;
+        ptr->points[i].y += y;
+    }
+
+    void setPoint(int i, int x, int y)
+    {
+        ptr->points[i].x = x;
+        ptr->points[i].y = y;
+        ptr->posx = calcTopLeft(ptr->points[0].x, ptr->points[0].y, x, y).x;
+        ptr->posy = calcTopLeft(ptr->points[0].x, ptr->points[0].y, x, y).y;
+
+        ptr->width = abs(ptr->points[i].x - ptr->points[0].x);
+        ptr->height = abs(ptr->points[i].y - ptr->points[0].y);
+    }
+
+    UID_Curve(int l, int x1, int y1, int x2, int y2, Palette* palette, Object* parent)
+    {
+        id = UID.Add_Object(l, curve);
+        layer = l;
+        ptr = UID.layer[layer]->object[id];
+        ptr->points.push_back({ x1,y1 });
+        ptr->points.push_back({ x2,y2 });
+        ptr->posx = calcTopLeft(x1, y1, x2, y2).x;
+        ptr->posy = calcTopLeft(x1, y1, x2, y2).y;
+        ptr->width = abs(x2 - x1) + 1;
+        ptr->height = abs(y2 - y1) + 1;
         ptr->palette = palette;
         ptr->parent = parent;
     }

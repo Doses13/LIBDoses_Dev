@@ -6,7 +6,6 @@
 
 #include <windows.h>
 #include <wingdi.h>
-#include <math.h>
 #include <thread>
 #include <string>
 #include "UIDoses.cpp"
@@ -169,9 +168,6 @@ void Program()// main program---------------------------------------------------
 
     WINDOWPLACEMENT wp;
 
-    UID_Rect Rect0(0, 200, 300, 200, 200, UID.Add_Palette({ 0xffffff, 0xff0000 }), nullptr);
-    UID_Rect Rect1(0, 100, 100, 100, 80, UID.Add_Palette({ 0x00ff80 }), nullptr);
-
     //(required)
     UID_Input.mouseL = &MInfo.Mouse.l;
     UID_Input.mouseR = &MInfo.Mouse.r;
@@ -179,15 +175,42 @@ void Program()// main program---------------------------------------------------
     UID_Input.mouseX = &MInfo.Mouse.cx;
     UID_Input.mouseY = &MInfo.Mouse.cy;
 
+    
+    UID_Rect Rect0(0, 200, 300, 200, 200, UID.Add_Palette({ 0xffffff, 0xff0000 }), nullptr);
+    UID_Rect Rect1(0, 100, 100, 100, 80, UID.Add_Palette({ 0x00ff80 }), nullptr);
+    //UID_Rect Ian1(0, 400, 300, 300, 50, UID.Add_Palette({ UID_PURPLE, UID_CYAN }), nullptr);
+    //UID_Rect Ian2(0, 400, 50, 100, 500, UID.Add_Palette({ UID_ORANGE, UID_YELLOW }), nullptr);
+    
+    //UID_Curve curv0(0, 400, 400, 403, 500, UID.Add_Palette({0xffffff}), nullptr);
+    //curv0.ptr->HoldOn.push_back(followMouse);
+
+    
     Rect0.addHoldOn(followMouse);
     Rect0.addHoverOn(incPal);
     Rect0.addHoverOff(decPal);
+    /*
+    Rect1.addHoldOn(followMouse);
 
+    Ian1.addHoldOn(followMouse);
+    Ian1.addHoverOn(incPal);
+    Ian1.addHoverOff(decPal);
+
+    Ian2.addHoldOn(followMouse);
+    Ian2.addHoverOn(incPal);
+    Ian2.addHoverOff(decPal);
+    */
+
+    //float theta = 0;
+    //curv0.ptr->line_weight = 1;
     while (running)
     {
         //write logic here
 
-        Rect1.ptr->palette->color[0]++;
+        //curv0.setPoint(1, 100 * cos(theta toRad) + 400, 100 * sin(theta toRad) + 400);
+        //curv0.ptr->line_weight += .05;
+        //theta+=.1;
+
+        //curv0.movePoint(1, 1, 0);
 
         //get mouse input (required)
         if (GetCursorPos(&mouse_cords) && GetWindowPlacement(hwnd, &wp))
