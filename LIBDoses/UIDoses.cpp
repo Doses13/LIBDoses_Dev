@@ -1,6 +1,43 @@
-#include "UIDoses.h"
+#define UID_WHITE  0xffffff
+#define UID_75GREY 0xbfbfbf
+#define UID_50GREY 0x7f7f7f
+#define UID_25GREY 0x3f3f3f
+#define UID_BLACK  0x000000
+#define UID_BLUE   0x0000ff
+#define UID_CYAN   0x00ffff
+#define UID_GREEN  0x00ff00
+#define UID_YELLOW 0xffff00
+#define UID_ORANGE 0xff7f00
+#define UID_RED    0xff0000
+#define UID_PURPLE 0xff00ff
+#define _25P      +0x3f000000
+#define _50P      +0x7f000000
+#define _75P      +0xbf000000
+#define _100P     +0xff000000
+
+#define PI 3.14159265
+#define toDeg *180/PI
+#define toRad *PI/180
+
+#include <vector>
+#include <math.h>
+
+struct Object;
+
+typedef void(*basicFunc)(Object*);
+
+typedef struct vector2
+{
+    int x, y;
+};
+
+int clamp(int min, int max, int val);
+
+//end of header file
 
 using namespace std;
+
+//storage classes/structs
 
 static class Input_Information
 {
@@ -160,6 +197,12 @@ struct Object
     vector<basicFunc> HoldOn;
     vector<basicFunc> HoldOff;
 
+    //constraints
+    int xMin;
+    int xMax;
+    int yMin;
+    int yMax;
+
     //constructors
     Object()
     {
@@ -191,6 +234,11 @@ struct Object
 
 struct Layer
 {
+private:
+    unsigned int lastw;
+    unsigned int lasth;
+    friend void UID::Render(static void* mem, static unsigned int mh, static unsigned int mw);
+public:
     vector<Object*> object; //Always stores ALL objects on the layer IN ORDER OF IDs and should not be re-ordered (objects removed when deleted)
     vector<Object*> order; //Stores ACTIVE objects in render order (objects removed when set to enabled is false)
     unsigned int* buffer;
@@ -198,30 +246,37 @@ struct Layer
     unsigned int h;
     bool custom;
     bool refresh;
+    bool postProcess;
     int id;
 
     Layer()
     {
         w = 0;
         h = 0;
+        lastw = 0;
+        lasth = 0;
         custom = false;
         refresh = true;
+        postProcess = false;
     }
 }Layer0;
 
 class UID
 {
-    const int maxX = 1920;
-    const int maxY = 1080;
+    static const int maxX = 1920;
+    static const int maxY = 1080;
 
 public:
 
     vector<Layer*> layer = { &Layer0 };
     vector<Palette*> palette = { &Palette0 };
     vector<Icon*> icon; // for list of icons
-    Object** onTop = new Object* [maxX * maxY];
-    Object* cOnTop = &Object0; 
-    Object* pOnTop = &Object0; //stores object that mouse was on last
+
+    Object* onTop[maxX * maxY];
+    Object* cOnTop = &Object0;  //object that is under mouse for the frame (currently onTop)
+    Object* pOnTop = &Object0;  //stores object that mouse was on last frame (previously onTop)
+    Object* holding = &Object0; //object that is being held
+
     bool firstRender = true;
 
     unsigned int BGcolor = 0x202020;
@@ -249,7 +304,7 @@ public:
 
     void Add_Layer()
     {
-        layer.push_back(new Layer);
+        layer.push_back(new Layer());
         layer.back()->id = layer.size();
     }
 
@@ -308,37 +363,57 @@ public:
         UID_Input.cmouseX = *UID_Input.mouseX;
         UID_Input.cmouseY = *UID_Input.mouseY;
 
-        cOnTop = Get_Obj(*UID_Input.mouseX, *UID_Input.mouseY, (int)mw, (int)mh); //get object that on under mouse
+        UID_Input.cmouseX = clamp(0, mw, UID_Input.cmouseX);
+        UID_Input.cmouseY = clamp(0, mw, UID_Input.cmouseY);
+
+        cOnTop = Get_Obj(UID_Input.cmouseX, UID_Input.cmouseY, (int)mw, (int)mh); //get object that on under mouse
 
         if (!firstRender)//handle events if its not the first render
         {
-            if (UID_Input.cmouseL && !UID_Input.pmouseL)//--------test click on
+            if (holding == &Object0)
             {
-                for (int i = 0; i < cOnTop->ClickOn.size(); i++)
+                if (UID_Input.cmouseL && !UID_Input.pmouseL)//--------test click on
                 {
-                    cOnTop->ClickOn[i](cOnTop);
+                    for (int i = 0; i < cOnTop->ClickOn.size(); i++)
+                    {
+                        cOnTop->ClickOn[i](cOnTop);
+                    }
+                }
+                else if (cOnTop != pOnTop)//--------------------------test hover
+                {
+                    for (int i = 0; i < cOnTop->HoverOn.size(); i++)//execute hover on for new
+                    {
+                        cOnTop->HoverOn[i](cOnTop);
+                    }
+                    for (int i = 0; i < pOnTop->HoverOff.size(); i++)
+                    {
+                        pOnTop->HoverOff[i](pOnTop);
+                    }
+                }
+                if (UID_Input.cmouseL && UID_Input.pmouseL)//-----test hold on
+                {
+                    holding = pOnTop;
+                    for (int i = 0; i < pOnTop->HoldOn.size(); i++)
+                    {
+                        pOnTop->HoldOn[i](pOnTop);
+                    }
                 }
             }
-            else if (cOnTop != pOnTop)//--------------------------test hover
+            else if (holding != &Object0)
             {
-                for (int i = 0; i < cOnTop->HoverOn.size(); i++)//execute hover on for new
+                if (UID_Input.cmouseL && UID_Input.pmouseL)//-----test hold on
                 {
-                    cOnTop->HoverOn[i](cOnTop);
+                    for (int i = 0; i < holding->HoldOn.size(); i++)
+                    {
+                        holding->HoldOn[i](holding);
+                    }
                 }
-                for (int i = 0; i < pOnTop->HoverOff.size(); i++)
+                else
                 {
-                    pOnTop->HoverOff[i](pOnTop);
-                }
-            }
-            else if (UID_Input.cmouseL && UID_Input.pmouseL)//-----test hold on
-            {
-                for (int i = 0; i < cOnTop->HoldOn.size(); i++)
-                {
-                    cOnTop->HoldOn[i](cOnTop);
+                    holding = &Object0;
                 }
             }
         }
-        else firstRender = false;
 
         //write place holder to previous value placeholders
         UID_Input.pmouseL = UID_Input.cmouseL;
@@ -372,13 +447,17 @@ public:
             // Does checks on layer buffer
 
             Layer* lptr = layer[i];
-            unsigned int* pixel = lptr->buffer;
 
             bool ref = lptr->refresh;
             bool cus = lptr->custom;
+            bool ppr = lptr->postProcess;
             bool buf = lptr->buffer;
             unsigned int w = lptr->w;
             unsigned int h = lptr->h;
+
+            bool needsBuffer = true;
+
+            if (ref && !cus && !ppr) needsBuffer = false;
 
             if (buf) // has buffer
             {
@@ -414,8 +493,10 @@ public:
                     h = mh;
                 }
             }
+            
+            lptr->buffer = memptr;//makes layer point to main buffer instead of its own buffer
 
-            pixel = lptr->buffer;
+            unsigned int* pixel = lptr->buffer;
             for (int j = 0; j < h * w; j++) // writes background color to main buffer
             {
                 *pixel++ = 0xff000000;
@@ -443,6 +524,13 @@ public:
                 so = (int)((oy + oh) > (int)h) * (oy + oh - (int)h);
                 wo = (int)(ox < 0) * (-ox);
                 eo = (int)((ox + ow) > (int)w) * (ox + ow - (int)w);
+
+                /*
+                int cxs = clamp(0, w, ox);
+                int cys = clamp(0, h, oy);
+                int cxe = clamp(0, w, ox + ow);
+                int cye = clamp(0, h, ox + oh);
+                */
 
                 switch (optr->type)
                 {
@@ -506,18 +594,21 @@ public:
 
             // post process
 
-            // write to main memory buffer
-
-            memptr = (unsigned int*)mem; // resets position of main memory pointer
-            pixel = lptr->buffer; // resets position of layer memory pointer
-
-            for (unsigned int j = 0; j < mw * mh; j++)
+            // write to main memory buffer if it needs to
+            if (lptr->postProcess)
             {
-                *memptr = (int)(*pixel != 0xff000000) * (*pixel) + (int)(*pixel == 0xff000000) * (*memptr);
-                memptr++;
-                pixel++;
+                memptr = (unsigned int*)mem; // resets position of main memory pointer
+                pixel = lptr->buffer; // resets position of layer memory pointer
+
+                for (unsigned int j = 0; j < mw * mh; j++)
+                {
+                    *memptr = (int)(*pixel != 0xff000000) * (*pixel) + (int)(*pixel == 0xff000000) * (*memptr);
+                    memptr++;
+                    pixel++;
+                }
             }
         }
+        firstRender = false;
     }
 }UID;
 
@@ -635,7 +726,6 @@ public:
         ptr->points[i].y = y;
         ptr->posx = calcTopLeft(ptr->points[0].x, ptr->points[0].y, x, y).x;
         ptr->posy = calcTopLeft(ptr->points[0].x, ptr->points[0].y, x, y).y;
-
         ptr->width = abs(ptr->points[i].x - ptr->points[0].x);
         ptr->height = abs(ptr->points[i].y - ptr->points[0].y);
     }
@@ -658,32 +748,58 @@ public:
 
 //predefined functions
 
-void followMouse(Object* o)
-{
+void followMouse(Object* o) {
     o->posx += UID_Input.cmouseX - UID_Input.pmouseX;
     o->posy += UID_Input.cmouseY - UID_Input.pmouseY;
 }
 
-void incPal(Object * o)
-{
-    if (o->main_color < o->palette->color.size()-1) 
-    {
-        o->main_color++;
-    }
-    else
-    {
-        o->main_color = 0;
-    }
+void incPal(Object * o) {
+    if (o->main_color < o->palette->color.size()-1) { o->main_color++; }
+    else { o->main_color = 0; }
 }
 
-void decPal(Object* o)
-{
-    if (o->main_color > 0)
-    {
-        o->main_color--;
-    }
-    else
-    {
-        o->main_color = o->palette->color.size()-1;
-    }
+void decPal(Object* o) {
+    if (o->main_color > 0) { o->main_color--; }
+    else { o->main_color = o->palette->color.size()-1; } 
 }
+
+//general functions
+
+int clamp(int min, int max, int val)
+{
+    if (val > max) val = max;
+    else if (val < min) val = min;
+    return val;
+}
+
+//thinking
+
+/*
+
+LAYER RENDER LOGIC PSUDOCODE
+
+refresh     : if false the buffer is not cleared each frame            (has own buffer)
+custom      : if true the buffer gets a custom size                    (has own buffer)
+postprocess : if true layer has processing as it writes to main buffer (has own buffer)
+
+doesn't need buffer if (bypass everything below)
+refresh     : true
+custom      : false
+postprocess : false
+
+
+wres = (lptr->w != mw && lptr->h !=mh && !cus) //knows if there is a window resize
+cres = (lptr->w != lptr->lastw || lptr->h != lptr->lasth)
+
+if (lptr->buffer)//has buffer
+{
+    if(wres)
+}
+else
+{
+
+}
+
+
+
+*/

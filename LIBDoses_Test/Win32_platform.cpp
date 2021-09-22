@@ -9,8 +9,10 @@
 #include <thread>
 #include <string>
 #include "UIDoses.cpp"
+#include "TimeDoses.cpp"
 
 using namespace std;
+using namespace std::chrono;
 
 // Debug Variables
 
@@ -157,7 +159,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
     ProgramLoop.join();
 
-    return 0;
+    return TimeD.delta*1000;
 }
 
 void Program()// main program---------------------------------------------------------
@@ -175,54 +177,45 @@ void Program()// main program---------------------------------------------------
     UID_Input.mouseX = &MInfo.Mouse.cx;
     UID_Input.mouseY = &MInfo.Mouse.cy;
 
+    //chrono::high_resolution_clock timer;
     
     UID_Rect Rect0(0, 200, 300, 200, 200, UID.Add_Palette({ 0xffffff, 0xff0000 }), nullptr);
-    UID_Rect Rect1(0, 100, 100, 100, 80, UID.Add_Palette({ 0x00ff80 }), nullptr);
-    //UID_Rect Ian1(0, 400, 300, 300, 50, UID.Add_Palette({ UID_PURPLE, UID_CYAN }), nullptr);
-    //UID_Rect Ian2(0, 400, 50, 100, 500, UID.Add_Palette({ UID_ORANGE, UID_YELLOW }), nullptr);
-    
-    //UID_Curve curv0(0, 400, 400, 403, 500, UID.Add_Palette({0xffffff}), nullptr);
-    //curv0.ptr->HoldOn.push_back(followMouse);
-
+    //UID_Rect Rect1(0, 100, 100, 100, 80, UID.Add_Palette({ 0x00ff80 }), nullptr);
+    UID_Rect fps(0, 0, 0, 1, 8, UID.Add_Palette({ UID_RED }), nullptr);
+    UID_Rect r100(0, 100, 0, 1, 4, UID.Add_Palette({ UID_GREEN }), nullptr);
+    UID_Rect r200(0, 200, 0, 1, 4, UID.Add_Palette({ UID_GREEN }), nullptr);
+    UID_Rect r300(0, 300, 0, 1, 4, UID.Add_Palette({ UID_GREEN }), nullptr);
+    UID_Rect r400(0, 400, 0, 1, 4, UID.Add_Palette({ UID_GREEN }), nullptr);
     
     Rect0.addHoldOn(followMouse);
     Rect0.addHoverOn(incPal);
     Rect0.addHoverOff(decPal);
-    /*
-    Rect1.addHoldOn(followMouse);
 
-    Ian1.addHoldOn(followMouse);
-    Ian1.addHoverOn(incPal);
-    Ian1.addHoverOff(decPal);
-
-    Ian2.addHoldOn(followMouse);
-    Ian2.addHoverOn(incPal);
-    Ian2.addHoverOff(decPal);
-    */
-
-    //float theta = 0;
-    //curv0.ptr->line_weight = 1;
     while (running)
     {
+        TimeD.start();
         //write logic here
-
-        //curv0.setPoint(1, 100 * cos(theta toRad) + 400, 100 * sin(theta toRad) + 400);
-        //curv0.ptr->line_weight += .05;
-        //theta+=.1;
-
-        //curv0.movePoint(1, 1, 0);
+        
+        if (TimeD.frames % 10 == 0) { fps.setPos(TimeD.rate, 0); };
 
         //get mouse input (required)
-        if (GetCursorPos(&mouse_cords) && GetWindowPlacement(hwnd, &wp))
-        {
-            MInfo.Mouse.cx = mouse_cords.x - wp.rcNormalPosition.left - 8;
-            MInfo.Mouse.cy = mouse_cords.y - wp.rcNormalPosition.top - 32;
+        if (GetCursorPos(&mouse_cords) && GetWindowPlacement(hwnd, &wp)) {
+            if (wp.showCmd == SW_SHOWNORMAL)
+            {
+                MInfo.Mouse.cx = mouse_cords.x - wp.rcNormalPosition.left - 8;
+                MInfo.Mouse.cy = mouse_cords.y - wp.rcNormalPosition.top - 32;
+            }
+            else if (wp.showCmd == SW_SHOWMAXIMIZED)
+            {
+                MInfo.Mouse.cx = mouse_cords.x - wp.ptMaxPosition.x - 1;
+                MInfo.Mouse.cy = mouse_cords.y - wp.ptMaxPosition.y - 24;
+            }            
         }
-
         //render
         if (RInfo.screenHeight() != RInfo.buffer.height || RInfo.screenWidth() != RInfo.buffer.width) { Reallocate(); }
         UID.Render(RInfo.buffer.memory, RInfo.buffer.height, RInfo.buffer.width);
         StretchDIBits(RInfo.hdc, 0, RInfo.buffer.height, RInfo.buffer.width, -RInfo.buffer.height - 1, 0, 0, RInfo.buffer.width, RInfo.buffer.height, RInfo.buffer.memory, &RInfo.buffer.bitmap_info, DIB_RGB_COLORS, SRCCOPY);
+        TimeD.stop();
     }
 }
 
