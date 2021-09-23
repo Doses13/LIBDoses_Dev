@@ -22,6 +22,8 @@
 #include <vector>
 #include <math.h>
 
+struct Layer;
+
 struct Object;
 
 typedef void(*basicFunc)(Object*);
@@ -113,6 +115,14 @@ unsigned int adjValByFac(unsigned int c, float fac)
     return rgbToInt(temp);
 }
 
+struct Animation
+{
+    //in pixels per second
+    int speed;
+    int endx;
+    int endy;
+};
+
 struct Palette
 {
     vector<unsigned int> color;
@@ -154,7 +164,9 @@ struct Object
 
     // Inheritance
     int id, order, layer;
+    Layer* lptr;
     Palette* palette;
+    Animation* anim;
     int main_color; //index to palette
     int sec_color;  //index to palette
 
@@ -198,10 +210,10 @@ struct Object
     vector<basicFunc> HoldOff;
 
     //constraints
-    int xMin;
-    int xMax;
-    int yMin;
-    int yMax;
+    int xMin = -9999;
+    int xMax = 9999;
+    int yMin = -9999;
+    int yMax = 9999;
 
     //constructors
     Object()
@@ -237,7 +249,6 @@ struct Layer
 private:
     unsigned int lastw;
     unsigned int lasth;
-    friend void UID::Render(static void* mem, static unsigned int mh, static unsigned int mw);
 public:
     vector<Object*> object; //Always stores ALL objects on the layer IN ORDER OF IDs and should not be re-ordered (objects removed when deleted)
     vector<Object*> order; //Stores ACTIVE objects in render order (objects removed when set to enabled is false)
@@ -255,10 +266,11 @@ public:
         h = 0;
         lastw = 0;
         lasth = 0;
-        custom = false;
         refresh = true;
+        custom = false;
         postProcess = false;
     }
+friend class UID;
 }Layer0;
 
 class UID
@@ -430,12 +442,14 @@ public:
 
         //HANDLE RENDERING
 
-        unsigned int* memptr = (unsigned int*)mem; // assign memory pointer
+        unsigned int* memptr = (unsigned int*)mem; // memptr is only for cycling through main buffer
+        unsigned int* pixel = (unsigned int*)mem;                       // pixel is for cycling through a layers buffer if it has one 
 
         for (int i = 0; i < mh * mw; i++) // writes background color to main buffer
         {
             *memptr++ = BGcolor;
         }
+        memptr = (unsigned int*)mem;
 
         for (int i = 0; i < maxX * maxY; i++) // clears on top array
         {
@@ -444,111 +458,105 @@ public:
 
         for (int i = 0; i < layer.size(); i++)// for each layer ----------------------------------
         {
-            // Does checks on layer buffer
-
             Layer* lptr = layer[i];
-
+            
             bool ref = lptr->refresh;
             bool cus = lptr->custom;
             bool ppr = lptr->postProcess;
             bool buf = lptr->buffer;
-            unsigned int w = lptr->w;
-            unsigned int h = lptr->h;
+            unsigned int lw = lptr->w;
+            unsigned int lh = lptr->h;
+            unsigned int llw = lptr->lastw;
+            unsigned int llh = lptr->lasth;
 
-            bool needsBuffer = true;
-
-            if (ref && !cus && !ppr) needsBuffer = false;
-
-            if (buf) // has buffer
+            if (ref && !cus && !ppr) 
+            { 
+                lptr->buffer = (unsigned int*)mem; 
+                lptr->w = mw;
+                lptr->h = mh;
+            }
+            else if ((lw != llw || lh != llh) && lptr->custom) //if custom resize
             {
-                if (ref || w != mw || h != mh) // need to refresh (default case) (also goes if window was resized)
+                if (ref) //if needs to refresh
                 {
-                    free(lptr->buffer);
-                    if (cus) // sets layers buffer to its custom size
+                    if (lptr->buffer) { free(lptr->buffer); };
+                    lptr->buffer = (unsigned int*)malloc(lw * lh * sizeof(unsigned int));
+                    pixel = lptr->buffer;
+                    for (int j = 0; j < lh * lw; j++) // writes background color to layer buffer
                     {
-                        lptr->buffer = (unsigned int*)malloc(w * h * sizeof(unsigned int));
+                        *pixel++ = 0xff000000;
                     }
-                    else // sets layers buffer it size of main buffer
-                    {
-                        lptr->buffer = (unsigned int*)malloc(mw * mh * sizeof(unsigned int));
-                        lptr->w = mw;
-                        lptr->h = mh;
-                        w = mw;
-                        h = mh;
-                    }
+                    pixel = lptr->buffer;
+                    lptr->lastw = lw;
+                    lptr->lasth = lh;
+                }
+                else
+                {
+                    //code to transfer old buffer to new resized buffer
                 }
             }
-            else //does not have buffer
+            else if ((lptr->w != mw || lptr->h != mh) && !cus) //if window resize
             {
-                if (cus)//should have h and w already set
+                if (ref)
                 {
-                    lptr->buffer = (unsigned int*)malloc(w * h * sizeof(unsigned int));
-                }
-                else // if not custom it gives it the resolution of the main memory buffer
-                {
+                    if (lptr->buffer) { free(lptr->buffer); };
                     lptr->buffer = (unsigned int*)malloc(mw * mh * sizeof(unsigned int));
-                    lptr->w = mw;
-                    lptr->h = mh;
-                    w = mw;
-                    h = mh;
+                    pixel = lptr->buffer;
+                    for (int j = 0; j < lh * lw; j++) // writes background color to layer buffer
+                    {
+                        *pixel++ = 0xff000000;
+                    }
+                    pixel = lptr->buffer;
+                    lptr->lastw = lw;
+                    lptr->lasth = lh;
                 }
-            }
-            
-            lptr->buffer = memptr;//makes layer point to main buffer instead of its own buffer
-
-            unsigned int* pixel = lptr->buffer;
-            for (int j = 0; j < h * w; j++) // writes background color to main buffer
-            {
-                *pixel++ = 0xff000000;
+                else
+                {
+                    //code to transfer old buffer to new resized buffer
+                }
             }
 
             // starts rendering of and object
 
             for (int j = 0; j < lptr->order.size(); j++)// for each object------------------------
             {
-                pixel = lptr->buffer; // resets pointer position
+                //pixel = lptr->buffer;
 
                 Object* optr = lptr->order[j];
+
+                //clamp objects coordinates
+                optr->posx = clamp(optr->xMin, optr->xMax, optr->posx);
+                optr->posy = clamp(optr->yMin, optr->yMax, optr->posy);
+
                 int oy = optr->posy;             //object y
                 int ox = optr->posx;             //object x
                 int oh = optr->height;           //object height
                 int ow = optr->width;            //object width
                 unsigned int mColor = optr->palette->color[optr->main_color];//objects main color
+                
 
-                // how far object goes over border
-                int no = 0;
-                int so = 0;
-                int wo = 0;
-                int eo = 0;
-                no = (int)(oy < 0) * (-oy);
-                so = (int)((oy + oh) > (int)h) * (oy + oh - (int)h);
-                wo = (int)(ox < 0) * (-ox);
-                eo = (int)((ox + ow) > (int)w) * (ox + ow - (int)w);
-
-                /*
-                int cxs = clamp(0, w, ox);
-                int cys = clamp(0, h, oy);
-                int cxe = clamp(0, w, ox + ow);
-                int cye = clamp(0, h, ox + oh);
-                */
+                //clamp objects rendering box so it doesnt go off screen
+                int cxs = clamp(0, lptr->w, ox);     //clamped x start
+                int cys = clamp(0, lptr->h, oy);     //clamped y start
+                int cxe = clamp(0, lptr->w, ox + ow);//clamped x end
+                int cye = clamp(0, lptr->h, oy + oh);//clamped y end
 
                 switch (optr->type)
                 {
                 case rectangle:
-                    pixel += ((int)w * (oy + no)) + ox + wo;//set pixel to start
-
-                    for (int y = oy + no; y < oy + oh - so; y++)
+                    for (int y = cys; y < cye; y++)
                     {
-                        for (int x = ox + wo; x < ow + ox - eo; x++)
+                        pixel = lptr->buffer + (y * lptr->w + cxs);
+                        for (int x = cxs; x < cxe; x++)
                         {
                             *pixel++ = mColor;
                             onTop[y * 1920 + x] = optr;
                         }
-                        pixel += (int)w - ow + eo + wo;
                     }
                     break;
                 case curve:
                 {
+                    /*
                     float slope = ((float)optr->points[1].y - (float)optr->points[0].y) / ((float)optr->points[1].x - (float)optr->points[0].x);
                     int orx = optr->posx;
                     int ory = optr->posy;
@@ -556,9 +564,9 @@ public:
                     {
                         ory += optr->height;
                     }
-                    float lw = optr->line_weight/2;
+                    float lnw = optr->line_weight/2;
                     
-                    pixel += ((int)w * (oy + no)) + ox + wo;//set pixel to start
+                    pixel += ((int)lw * (oy + no)) + ox + wo;//set pixel to start
                     for (int y = oy + no; y < oy + oh - so; y++)
                     {
                         for (int x = ox + wo; x < ow + ox - eo; x++)
@@ -570,11 +578,11 @@ public:
                             hori = (int)(hori != 0) * hori + (int)(hori == 0) * 0.0000001;//make sure hori IS NOT 0
                             float len = vert * cos(atan(vert / hori));
                             //*pixel++ = (int)(len <= lw) * mColor + (int)(len > lw) * *pixel;//no aa
-                            *pixel++ = (int)(len <= lw) * adjValByFac(mColor, abs(len-1)) + (int)(len > lw) * *pixel;// with aa
+                            *pixel++ = (int)(len <= lnw) * adjValByFac(mColor, abs(len-1)) + (int)(len > lnw) * *pixel;// with aa
                             onTop[y * 1920 + x] = optr;
                         }
-                        pixel += (int)w - ow + eo + wo;
-                    }
+                        pixel += (int)lw - ow + eo + wo;
+                    }*/
                 }
                     break;
                 case elipse:
@@ -595,7 +603,7 @@ public:
             // post process
 
             // write to main memory buffer if it needs to
-            if (lptr->postProcess)
+            if (lptr->postProcess || !lptr->refresh)
             {
                 memptr = (unsigned int*)mem; // resets position of main memory pointer
                 pixel = lptr->buffer; // resets position of layer memory pointer
@@ -746,7 +754,7 @@ public:
     }
 };
 
-//predefined functions
+//predefined event functions
 
 void followMouse(Object* o) {
     o->posx += UID_Input.cmouseX - UID_Input.pmouseX;
@@ -763,6 +771,9 @@ void decPal(Object* o) {
     else { o->main_color = o->palette->color.size()-1; } 
 }
 
+void scale(Object* o) {
+
+}
 //general functions
 
 int clamp(int min, int max, int val)
@@ -772,33 +783,14 @@ int clamp(int min, int max, int val)
     return val;
 }
 
-//thinking
-
-/*
-
-LAYER RENDER LOGIC PSUDOCODE
-
-refresh     : if false the buffer is not cleared each frame            (has own buffer)
-custom      : if true the buffer gets a custom size                    (has own buffer)
-postprocess : if true layer has processing as it writes to main buffer (has own buffer)
-
-doesn't need buffer if (bypass everything below)
-refresh     : true
-custom      : false
-postprocess : false
-
-
-wres = (lptr->w != mw && lptr->h !=mh && !cus) //knows if there is a window resize
-cres = (lptr->w != lptr->lastw || lptr->h != lptr->lasth)
-
-if (lptr->buffer)//has buffer
+int mapToByte(int min, int max, int val)
 {
-    if(wres)
+    val = clamp(min, max, val);
+    if (val == 0) { return 0; }
+    return 256 * ((max - min) / val) - 1;
 }
-else
-{
 
-}
+/*thinking
 
 
 

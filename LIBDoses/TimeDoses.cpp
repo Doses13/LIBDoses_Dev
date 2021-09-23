@@ -7,14 +7,17 @@ using namespace std::chrono;
 static struct FrameRateInfo
 {
 private:
+    static const int mem = 500;
     high_resolution_clock::time_point s; //holds start value
     high_resolution_clock::time_point e; //holds end value
+    int history[mem];
     double sleeptime;
 public:
     double delta;
     double rate;
     double run_time = 0;
     double totalavg = 0;
+    double recentavg = 0;
     int frames = 0;
 
     double frameCap = 0;
@@ -51,6 +54,13 @@ public:
         run_time += delta;
         rate = 1 / delta;
         totalavg = (totalavg * frames + rate) / (frames + 1);
+        history[frames % mem] = rate;
+        int t = 0;
+        for (int i = 0; i < mem-1; i++)
+        {
+            t += history[i];
+        }
+        recentavg = t / mem;
         frames++;        
     }
 }TimeD;

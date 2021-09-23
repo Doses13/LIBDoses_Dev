@@ -154,12 +154,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
         {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
-        }        
+        }
     }
 
     ProgramLoop.join();
 
-    return TimeD.delta*1000;
+    return TimeD.totalavg;
 }
 
 void Program()// main program---------------------------------------------------------
@@ -179,24 +179,34 @@ void Program()// main program---------------------------------------------------
 
     //chrono::high_resolution_clock timer;
     
-    UID_Rect Rect0(0, 200, 300, 200, 200, UID.Add_Palette({ 0xffffff, 0xff0000 }), nullptr);
-    //UID_Rect Rect1(0, 100, 100, 100, 80, UID.Add_Palette({ 0x00ff80 }), nullptr);
+    UID_Rect Rect0(0, 200, 300, 200, 200, UID.Add_Palette({ 0xffffff, 0x7f007f }), nullptr);
+    UID_Rect Rect1(0, 200, 300, 200, 200, UID.Add_Palette({ 0xeeeeee, 0x00ffff }), nullptr);
+    UID_Rect Rect2(0, 200, 300, 200, 200, UID.Add_Palette({ 0xdddddd, 0xff0000 }), nullptr);
     UID_Rect fps(0, 0, 0, 1, 8, UID.Add_Palette({ UID_RED }), nullptr);
-    UID_Rect r100(0, 100, 0, 1, 4, UID.Add_Palette({ UID_GREEN }), nullptr);
-    UID_Rect r200(0, 200, 0, 1, 4, UID.Add_Palette({ UID_GREEN }), nullptr);
-    UID_Rect r300(0, 300, 0, 1, 4, UID.Add_Palette({ UID_GREEN }), nullptr);
-    UID_Rect r400(0, 400, 0, 1, 4, UID.Add_Palette({ UID_GREEN }), nullptr);
     
     Rect0.addHoldOn(followMouse);
     Rect0.addHoverOn(incPal);
     Rect0.addHoverOff(decPal);
+
+    Rect1.addHoldOn(followMouse);
+    Rect1.addHoverOn(incPal);
+    Rect1.addHoverOff(decPal);
+
+    Rect2.addHoldOn(followMouse);
+    Rect2.addHoverOn(incPal);
+    Rect2.addHoverOff(decPal);
+
+    //Rect0.ptr->xMin = 400;
+    //Rect0.ptr->xMax = 400;
+    //Rect0.ptr->yMin = 200;
+    //Rect0.ptr->yMax = 500;
 
     while (running)
     {
         TimeD.start();
         //write logic here
         
-        if (TimeD.frames % 10 == 0) { fps.setPos(TimeD.rate, 0); };
+        if (TimeD.frames % 10 == 0) { fps.setPos(TimeD.recentavg, 0); };
 
         //get mouse input (required)
         if (GetCursorPos(&mouse_cords) && GetWindowPlacement(hwnd, &wp)) {
